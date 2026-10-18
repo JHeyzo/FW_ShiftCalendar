@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'calendar/month_page.dart';
+import 'calendar/year_page.dart';
 import 'theme/fw_tokens.dart';
 import 'todo/todo_page.dart';
 
@@ -36,6 +37,30 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+  bool _showYear = false;
+  DateTime _month =
+      DateTime(DateTime.now().year, DateTime.now().month, 1);
+
+  /// 日历 tab：年视图 / 月视图切换。
+  Widget _calendarTab() {
+    if (_showYear) {
+      final now = DateTime.now();
+      return YearPage(
+        year: _month.year,
+        today: DateTime(now.year, now.month, now.day),
+        onPickMonth: (m) => setState(() {
+          _month = DateTime(_month.year, m, 1);
+          _showYear = false;
+        }),
+      );
+    }
+    return MonthPage(
+      key: ValueKey('month-$_month'),
+      initialMonth: _month,
+      onOpenYear: () => setState(() => _showYear = true),
+      onMonthChanged: (m) => _month = m,
+    );
+  }
 
   void _create() {
     showModalBottomSheet(
@@ -71,7 +96,7 @@ class _HomeShellState extends State<HomeShell> {
       body: SafeArea(
         child: IndexedStack(
           index: _tab,
-          children: const [MonthPage(), TodoPage()],
+          children: [_calendarTab(), const TodoPage()],
         ),
       ),
       floatingActionButtonLocation:

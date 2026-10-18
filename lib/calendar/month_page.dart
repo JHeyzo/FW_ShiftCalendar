@@ -4,9 +4,23 @@ import '../theme/fw_tokens.dart';
 import 'lunar.dart';
 
 /// 月视图：对齐 ColorOS 系统日历。
-/// 空壳阶段：纯日历功能（翻月/选日/农历/节假日标记），排班功能后续接。
+/// 空壳阶段：纯日历功能（手势翻月/选日/农历/节假日标记），排班功能后续接。
 class MonthPage extends StatefulWidget {
-  const MonthPage({super.key});
+  const MonthPage({
+    super.key,
+    required this.initialMonth,
+    required this.onOpenYear,
+    required this.onMonthChanged,
+  });
+
+  /// 外部指定的月份（年视图点选回来时用）。
+  final DateTime initialMonth;
+
+  /// 点左上 "<"：进年视图。
+  final VoidCallback onOpenYear;
+
+  /// 翻月后回调用，同步外部持有的月份。
+  final ValueChanged<DateTime> onMonthChanged;
 
   @override
   State<MonthPage> createState() => _MonthPageState();
@@ -16,13 +30,18 @@ class _MonthPageState extends State<MonthPage> {
   late DateTime _month; // 当月（日固定为 1）
   late DateTime _selected;
   final DateTime _today = DateTime.now();
+  int _slideDir = 1; // 翻月动画方向：1 下个月，-1 上个月
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _month = DateTime(now.year, now.month, 1);
-    _selected = DateTime(now.year, now.month, now.day);
+    _month = DateTime(
+        widget.initialMonth.year, widget.initialMonth.month, 1);
+    _selected =
+        (_month.year == now.year && _month.month == now.month)
+            ? DateTime(now.year, now.month, now.day)
+            : DateTime(_month.year, _month.month, 1);
   }
 
   bool _sameDay(DateTime a, DateTime b) =>
@@ -30,11 +49,13 @@ class _MonthPageState extends State<MonthPage> {
 
   void _goMonth(int delta) {
     setState(() {
+      _slideDir = delta >= 0 ? 1 : -1;
       _month = DateTime(_month.year, _month.month + delta, 1);
       final last = DateTime(_month.year, _month.month + 1, 0).day;
       final d = _selected.day > last ? last : _selected.day;
       _selected = DateTime(_month.year, _month.month, d);
     });
+    widget.onMonthChanged(_month);
   }
 
   void _goToday() {
@@ -50,10 +71,41 @@ class _MonthPageState extends State<MonthPage> {
       children: [
         _header(),
         _weekdayRow(),
-        _monthGrid(),
+        _swipeableGrid(),
         _divider(),
         _dayDetail(),
       ],
+    );
+  }
+
+  /// 月历左右滑动翻月（对齐原版手势）。
+  Widget _swipeableGrid() {
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        final v = details.primaryVelocity ?? 0;
+        if (v < -200) {
+          _goMonth(1);
+        } else if (v > 200) {
+          _goMonth(-1);
+        }
+      },
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        transitionBuilder: (child, animation) {
+          final begin = Offset(0.25 * _slideDir, 0);
+          return SlideTransition(
+            position: Tween(begin: begin, end: Offset.zero)
+                .animate(CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOut)),
+            child: child,
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey('${_month.year}-${_month.month}'),
+          child: _gridColumn(),
+        ),
+      ),
     );
   }
 
@@ -64,7 +116,7 @@ class _MonthPageState extends State<MonthPage> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left, size: 28),
-            onPressed: () => _goMonth(-1),
+            onPressed: widget.onOpenYear, // 原版：< 进年视图
           ),
           GestureDetector(
             onTap: _goToday,
@@ -86,10 +138,6 @@ class _MonthPageState extends State<MonthPage> {
             ),
           ),
           const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.chevron_right, size: 28),
-            onPressed: () => _goMonth(1),
-          ),
           IconButton(
             icon: const Icon(Icons.more_vert, size: 24),
             onPressed: () => _menu(),
@@ -142,7 +190,7 @@ class _MonthPageState extends State<MonthPage> {
     );
   }
 
-  Widget _monthGrid() {
+  Widget _gridColumn() {
     final first = _month;
     final leading = first.weekday - 1; // 周一为首
     final days = DateTime(first.year, first.month + 1, 0).day;
