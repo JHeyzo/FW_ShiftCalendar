@@ -78,7 +78,7 @@ class _MonthPageState extends State<MonthPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '第 ${isoWeekNumber(_selected)} 周',
+                  '第${isoWeekNumber(_selected)}周',
                   style:
                       const TextStyle(fontSize: 14, color: FwTokens.ink55),
                 ),
