@@ -33,11 +33,11 @@ void main() {
       final detached = store.entries.singleWhere(
         (entry) => entry.id != series.id,
       );
-      expect(detached.start, DateTime(2025, 1, 10, 9));
+      expect(detached.start, DateTime(2025, 1, 7, 9));
       expect(detached.done, isTrue);
       expect(
         store
-            .occurrences(DateTime(2025, 1, 10), DateTime(2025, 1, 11))
+            .occurrences(DateTime(2025, 1, 7), DateTime(2025, 1, 8))
             .singleWhere((occurrence) => occurrence.entry.id == detached.id)
             .done,
         isTrue,
@@ -75,24 +75,162 @@ void main() {
     final newSegment = store.entries.singleWhere(
       (entry) => entry.id != series.id,
     );
-    expect(newSegment.start, DateTime(2025, 1, 10, 9));
+    expect(newSegment.start, DateTime(2025, 1, 7, 9));
     expect(oldSegment.repeatUntil, DateTime(2025, 1, 3));
-    expect(newSegment.repeatUntil, DateTime(2025, 2, 6));
-    expect(newSegment.completedDates, <String>{'2025-01-11'});
-    expect(newSegment.excludedDates, <String>{'2025-01-12'});
+    expect(newSegment.repeatUntil, DateTime(2025, 2, 3));
+    expect(newSegment.completedDates, <String>{'2025-01-08'});
+    expect(newSegment.excludedDates, <String>{'2025-01-09'});
     expect(
-      store
-          .occurrences(DateTime(2025, 1, 11), DateTime(2025, 1, 12))
-          .single
-          .done,
+      store.occurrences(DateTime(2025, 1, 8), DateTime(2025, 1, 9)).single.done,
       isTrue,
     );
     expect(
-      store.occurrences(DateTime(2025, 1, 12), DateTime(2025, 1, 13)),
+      store.occurrences(DateTime(2025, 1, 9), DateTime(2025, 1, 10)),
       isEmpty,
     );
     store.dispose();
   });
+
+  test(
+    'all edit with occurrence date shifts from the selected instance',
+    () async {
+      final store = AppStore(clock: () => DateTime(2025, 1, 1));
+      await store.load();
+      final series = CalendarEntry(
+        id: 'all-occurrence',
+        title: 'Daily',
+        start: DateTime(2025, 1, 1, 9),
+        kind: EntryKind.todo,
+        repeat: RepeatRule.daily,
+        repeatUntil: DateTime(2025, 1, 31),
+        completedDates: <String>{'2025-01-06'},
+        excludedDates: <String>{'2025-01-07'},
+      );
+      await store.saveEntry(series);
+
+      await store.updateEntry(
+        series,
+        series.copyWith(start: DateTime(2025, 1, 8, 9)),
+        occurrenceDate: DateTime(2025, 1, 6),
+        scope: EditScope.all,
+      );
+
+      final moved = store.entries.single;
+      expect(moved.start, DateTime(2025, 1, 3, 9));
+      expect(moved.repeatUntil, DateTime(2025, 2, 2));
+      expect(moved.completedDates, <String>{'2025-01-08'});
+      expect(moved.excludedDates, <String>{'2025-01-09'});
+      store.dispose();
+    },
+  );
+
+  test(
+    'all edit preserves the weekly series anchor and overnight span',
+    () async {
+      final store = AppStore();
+      await store.load();
+      addTearDown(store.dispose);
+      final series = CalendarEntry(
+        id: 'weekly-all',
+        title: 'Original',
+        start: DateTime(2026, 10, 1, 22, 30),
+        end: DateTime(2026, 10, 2, 8),
+        allDay: false,
+        repeat: RepeatRule.weekly,
+      );
+      await store.saveEntry(series);
+      await store.updateEntry(
+        series,
+        series.copyWith(
+          title: 'Renamed',
+          start: DateTime(2026, 10, 15, 22, 30),
+          end: DateTime(2026, 10, 16, 8),
+        ),
+        occurrenceDate: DateTime(2026, 10, 15),
+        scope: EditScope.all,
+      );
+      final renamed = store.entries.single;
+      expect(renamed.start, series.start);
+      expect(renamed.end, series.end);
+      expect(renamed.title, 'Renamed');
+      await store.updateEntry(
+        renamed,
+        renamed.copyWith(
+          start: DateTime(2026, 10, 17, 23),
+          end: DateTime(2026, 10, 18, 9),
+        ),
+        occurrenceDate: DateTime(2026, 10, 15),
+        scope: EditScope.all,
+      );
+      final moved = store.entries.single;
+      expect(moved.start, DateTime(2026, 10, 3, 23));
+      expect(moved.end, DateTime(2026, 10, 4, 9));
+      expect(
+        store
+            .occurrences(DateTime(2026, 10, 17), DateTime(2026, 10, 18))
+            .single
+            .start,
+        DateTime(2026, 10, 17, 23),
+      );
+    },
+  );
+
+  test(
+    'renaming all from a clamped February instance retains the 31st anchor',
+    () async {
+      final store = AppStore();
+      await store.load();
+      addTearDown(store.dispose);
+      final series = CalendarEntry(
+        id: 'monthly-anchor',
+        title: 'Monthly',
+        start: DateTime(2026, 1, 31),
+        repeat: RepeatRule.monthly,
+      );
+      await store.saveEntry(series);
+      await store.updateEntry(
+        series,
+        series.copyWith(title: 'Renamed', start: DateTime(2026, 2, 28)),
+        occurrenceDate: DateTime(2026, 2, 28),
+        scope: EditScope.all,
+      );
+      expect(store.entries.single.start, DateTime(2026, 1, 31));
+      expect(
+        store.occurrences(DateTime(2026, 3), DateTime(2026, 4)).single.start,
+        DateTime(2026, 3, 31),
+      );
+    },
+  );
+
+  test(
+    'future edit from first instance also moves exception keys and cutoff',
+    () async {
+      final store = AppStore();
+      await store.load();
+      addTearDown(store.dispose);
+      final series = CalendarEntry(
+        id: 'future-first',
+        title: 'Daily',
+        start: DateTime(2026, 10, 1),
+        repeat: RepeatRule.daily,
+        repeatUntil: DateTime(2026, 10, 31),
+        excludedDates: {'2026-10-03'},
+        completedDates: {'2026-10-04'},
+      );
+      await store.saveEntry(series);
+      await store.updateEntry(
+        series,
+        series.copyWith(start: DateTime(2026, 10, 2)),
+        occurrenceDate: DateTime(2026, 10, 1),
+        scope: EditScope.future,
+      );
+      final moved = store.entries.single;
+      expect(moved.start, DateTime(2026, 10, 2));
+      expect(moved.repeatUntil, DateTime(2026, 11, 1));
+      expect(moved.excludedDates, {'2026-10-04'});
+      expect(moved.completedDates, {'2026-10-05'});
+    },
+  );
 
   test('all edit shifts exception keys and cutoff; an edited cutoff stays selected', () async {
     final store = AppStore(clock: () => DateTime(2025, 1, 1));

@@ -85,8 +85,51 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
     );
     _title = TextEditingController(text: old?.title ?? '');
     _notes = TextEditingController(text: old?.notes ?? '');
-    _start = old?.start ?? day;
-    _end = old?.end;
+    final occurrence = widget.occurrenceDate;
+    if (old != null && occurrence != null && old.repeat != RepeatRule.none) {
+      // A recurring entry stores the series' first date, while the editor is
+      // opened for one particular instance. Show that instance's date without
+      // losing its time of day or its end-date span.
+      final target = dateOnly(occurrence);
+      final source = dateOnly(old.start);
+      _start = DateTime(
+        target.year,
+        target.month,
+        target.day,
+        old.start.hour,
+        old.start.minute,
+        old.start.second,
+        old.start.millisecond,
+        old.start.microsecond,
+      );
+      final daySpan = old.end == null
+          ? null
+          : DateTime.utc(old.end!.year, old.end!.month, old.end!.day)
+                .difference(DateTime.utc(source.year, source.month, source.day))
+                .inDays;
+      if (old.end != null && daySpan != null) {
+        final endDay = DateTime(
+          target.year,
+          target.month,
+          target.day + daySpan,
+        );
+        _end = DateTime(
+          endDay.year,
+          endDay.month,
+          endDay.day,
+          old.end!.hour,
+          old.end!.minute,
+          old.end!.second,
+          old.end!.millisecond,
+          old.end!.microsecond,
+        );
+      } else {
+        _end = null;
+      }
+    } else {
+      _start = old?.start ?? day;
+      _end = old?.end;
+    }
     _allDay = old?.allDay ?? true;
     _starred = old?.starred ?? false;
     _color = old?.colorValue ?? _palette.first;

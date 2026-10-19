@@ -32,6 +32,7 @@ class ReminderService {
   bool _supported = false;
   String? _statusMessage;
   String? _lastAppliedSignature;
+  bool? _exactAlarmPermissionGranted;
 
   String? get statusMessage => _statusMessage;
 
@@ -73,8 +74,8 @@ class ReminderService {
     }
   }
 
-  /// Requests Android 13+ notification permission after an explicit user tap.
-  /// Older Android versions do not show a runtime permission prompt.
+  /// Requests notification and exact-alarm permissions only after an explicit
+  /// user action. Synchronization itself never opens a system permission UI.
   Future<bool> requestPermission() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       _statusMessage = '日历提醒目前仅支持 Android。';
@@ -89,10 +90,24 @@ class ReminderService {
           >()
           ?.requestNotificationsPermission();
       final result = granted ?? false;
-      _statusMessage = result ? '通知权限已允许。' : '通知权限未开启；请在系统设置中允许本应用发送通知。';
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      // This is intentionally called only from this user-triggered method.
+      await android?.requestExactAlarmsPermission();
+      _exactAlarmPermissionGranted =
+          await android?.canScheduleExactNotifications() == true;
+      if (!result) {
+        _statusMessage = '通知权限未开启；请在系统设置中允许本应用发送通知。';
+      } else if (_exactAlarmPermissionGranted != true) {
+        _statusMessage = '通知权限已允许，但精准提醒权限未开启；提醒将以非精准方式发送。可再次点击授权或在系统设置中开启。';
+      } else {
+        _statusMessage = '通知权限和精准提醒权限已允许。';
+      }
       return result;
     } catch (error) {
-      _statusMessage = '请求通知权限失败：$error';
+      _statusMessage = '请求提醒权限失败：$error；请重试，未确认精准提醒权限时将使用非精准提醒。';
       return false;
     }
   }
@@ -126,6 +141,20 @@ class ReminderService {
         _statusMessage = '通知权限未开启；请在设置中开启通知后刷新提醒。';
         return;
       }
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      bool exactAllowed = false;
+      String? exactPermissionCheckError;
+      try {
+        exactAllowed = await android?.canScheduleExactNotifications() == true;
+      } catch (error) {
+        // A failed/unsupported capability query must never be reported as
+        // exact. Continue with the safe inexact mode and explain the fallback.
+        exactPermissionCheckError = error.toString();
+      }
+      _exactAlarmPermissionGranted = exactAllowed;
       await _refreshLocalTimezone();
       final now = DateTime.now();
       final horizonEnd = now.add(_schedulingHorizon);
@@ -194,6 +223,7 @@ class ReminderService {
       }
       final signature = jsonEncode(<Object?>[
         tz.local.name,
+        exactAllowed,
         for (final reminder in planned)
           <Object?>[
             reminder.id,
@@ -227,14 +257,25 @@ class ReminderService {
               category: AndroidNotificationCategory.reminder,
             ),
           ),
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          androidScheduleMode: exactAllowed
+              ? AndroidScheduleMode.exactAllowWhileIdle
+              : AndroidScheduleMode.inexactAllowWhileIdle,
           payload: candidate.payload,
         );
       }
       _lastAppliedSignature = signature;
-      _statusMessage = '已同步 ${planned.length} 条提醒（未来30天内，系统可能延迟投递）。';
+      if (exactPermissionCheckError != null) {
+        _statusMessage =
+            '已同步 ${planned.length} 条非精准提醒（未来30天内）；无法检查精准提醒权限：$exactPermissionCheckError。请重试检查权限。';
+      } else if (exactAllowed) {
+        _statusMessage = '已同步 ${planned.length} 条精准提醒（未来30天内）。';
+      } else {
+        _statusMessage =
+            '已同步 ${planned.length} 条非精准提醒（未来30天内）；精准提醒权限未开启，系统可能延迟投递。可点击授权或在系统设置中开启。';
+      }
     } catch (error) {
-      _statusMessage = '同步日历提醒失败：$error';
+      _lastAppliedSignature = null;
+      _statusMessage = '同步日历提醒失败：$error；请检查通知/精准提醒权限后重试。';
     }
   }
 

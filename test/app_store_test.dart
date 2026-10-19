@@ -65,7 +65,7 @@ void main() {
         monthOccurrences
             .where((o) => o.entry.id == 'month-end')
             .map((o) => o.start.day),
-        <int>[31, 31, 31],
+        <int>[31, 29, 31, 30, 31],
       );
       final leapOccurrences = store.occurrences(
         DateTime(2024, 1, 1),
@@ -74,8 +74,14 @@ void main() {
       expect(
         leapOccurrences
             .where((o) => o.entry.id == 'leap-day')
-            .map((o) => o.start.year),
-        <int>[2024, 2028],
+            .map((o) => DateTime(o.start.year, o.start.month, o.start.day)),
+        <DateTime>[
+          DateTime(2024, 2, 29),
+          DateTime(2025, 2, 28),
+          DateTime(2026, 2, 28),
+          DateTime(2027, 2, 28),
+          DateTime(2028, 2, 29),
+        ],
       );
     });
   });

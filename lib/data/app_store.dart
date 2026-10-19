@@ -428,13 +428,38 @@ class AppStore extends ChangeNotifier {
       );
     }
     await _commit(() {
-      final startShift = _calendarDayDelta(existing.start, replacement.start);
+      final target = dateOnly(occurrenceDate ?? existing.start);
+      final startShift = _calendarDayDelta(
+        occurrenceDate == null || existing.repeat == RepeatRule.none
+            ? existing.start
+            : target,
+        replacement.start,
+      );
       final repeatUntilWasEdited =
           replacement.repeatUntil != existing.repeatUntil;
-      if (existing.repeat == RepeatRule.none || scope == EditScope.all) {
+      if (existing.repeat == RepeatRule.none ||
+          scope == EditScope.all ||
+          (scope == EditScope.future &&
+              !target.isAfter(dateOnly(existing.start)))) {
+        // The editor displays the selected instance, not the series anchor.
+        // All-scope edits move the original anchor by that instance's delta;
+        // simply storing replacement.start would silently discard the past.
+        final reanchorDays =
+            existing.repeat != RepeatRule.none &&
+                occurrenceDate != null &&
+                scope == EditScope.all
+            ? _calendarDayDelta(
+                replacement.start,
+                _shiftCalendarDate(existing.start, startShift),
+              )
+            : 0;
         _replaceEntry(
           replacement.copyWith(
             id: existing.id,
+            start: _shiftWallDate(replacement.start, reanchorDays),
+            end: replacement.end == null
+                ? null
+                : _shiftWallDate(replacement.end!, reanchorDays),
             repeatUntil:
                 !repeatUntilWasEdited && replacement.repeatUntil != null
                 ? _shiftCalendarDate(replacement.repeatUntil!, startShift)
@@ -450,7 +475,6 @@ class AppStore extends ChangeNotifier {
           ),
         );
       } else {
-        final target = dateOnly(occurrenceDate ?? existing.start);
         if (scope == EditScope.single) {
           final detachedId =
               replacement.id == existing.id ||
@@ -473,12 +497,8 @@ class AppStore extends ChangeNotifier {
             ..._entries,
             replacement.copyWith(
               id: detachedId,
-              start: _rebaseEntryStart(
-                replacement.start,
-                existing.start,
-                target,
-              ),
-              end: _rebaseEntryEnd(replacement, existing.start, target),
+              start: replacement.start,
+              end: replacement.end,
               repeat: RepeatRule.none,
               clearRepeatUntil: true,
               excludedDates: const <String>{},
@@ -486,8 +506,6 @@ class AppStore extends ChangeNotifier {
               done: existing.completedDates.contains(dayKey(target)),
             ),
           ];
-        } else if (!target.isAfter(dateOnly(existing.start))) {
-          _replaceEntry(replacement.copyWith(id: existing.id));
         } else {
           final priorEnd = DateTime(target.year, target.month, target.day - 1);
           _replaceEntry(existing.copyWith(repeatUntil: priorEnd));
@@ -508,12 +526,8 @@ class AppStore extends ChangeNotifier {
             ..._entries,
             replacement.copyWith(
               id: futureId,
-              start: _rebaseEntryStart(
-                replacement.start,
-                existing.start,
-                target,
-              ),
-              end: _rebaseEntryEnd(replacement, existing.start, target),
+              start: replacement.start,
+              end: replacement.end,
               repeatUntil: shiftedRepeatUntil,
               excludedDates: _shiftFutureDateKeys(
                 replacement.excludedDates,
@@ -779,66 +793,13 @@ DateTime? _recurrenceDate(CalendarEntry entry, DateTime candidate) {
     case RepeatRule.weekly:
       return days % 7 == 0 ? candidate : null;
     case RepeatRule.monthly:
-      return candidate.day == start.day ? candidate : null;
+      final lastDay = DateTime(candidate.year, candidate.month + 1, 0).day;
+      return candidate.day == start.day.clamp(1, lastDay) ? candidate : null;
     case RepeatRule.yearly:
-      return candidate.month == start.month && candidate.day == start.day
-          ? candidate
-          : null;
+      if (candidate.month != start.month) return null;
+      final lastDay = DateTime(candidate.year, candidate.month + 1, 0).day;
+      return candidate.day == start.day.clamp(1, lastDay) ? candidate : null;
   }
-}
-
-DateTime _dateForOccurrence(
-  DateTime replacementStart,
-  DateTime occurrenceDate,
-) => DateTime(
-  occurrenceDate.year,
-  occurrenceDate.month,
-  occurrenceDate.day,
-  replacementStart.hour,
-  replacementStart.minute,
-  replacementStart.second,
-  replacementStart.millisecond,
-  replacementStart.microsecond,
-);
-
-DateTime _rebaseEntryStart(
-  DateTime replacementStart,
-  DateTime masterStart,
-  DateTime occurrenceDate,
-) {
-  if (sameDay(replacementStart, masterStart) ||
-      sameDay(replacementStart, occurrenceDate)) {
-    return _dateForOccurrence(replacementStart, occurrenceDate);
-  }
-  final occurrenceDay = _shiftCalendarDate(
-    occurrenceDate,
-    _calendarDayDelta(masterStart, replacementStart),
-  );
-  return _dateForOccurrence(replacementStart, occurrenceDay);
-}
-
-DateTime? _rebaseEntryEnd(
-  CalendarEntry replacement,
-  DateTime masterStart,
-  DateTime occurrenceDate,
-) {
-  if (replacement.end == null) return null;
-  final shiftedStart = _rebaseEntryStart(
-    replacement.start,
-    masterStart,
-    occurrenceDate,
-  );
-  final end = replacement.end!;
-  return DateTime(
-    shiftedStart.year,
-    shiftedStart.month,
-    shiftedStart.day + _calendarDayDelta(replacement.start, end),
-    end.hour,
-    end.minute,
-    end.second,
-    end.millisecond,
-    end.microsecond,
-  );
 }
 
 int _calendarDayDelta(DateTime from, DateTime to) => DateTime.utc(
@@ -849,6 +810,17 @@ int _calendarDayDelta(DateTime from, DateTime to) => DateTime.utc(
 
 DateTime _shiftCalendarDate(DateTime date, int dayDelta) =>
     DateTime(date.year, date.month, date.day + dayDelta);
+
+DateTime _shiftWallDate(DateTime date, int dayDelta) => DateTime(
+  date.year,
+  date.month,
+  date.day + dayDelta,
+  date.hour,
+  date.minute,
+  date.second,
+  date.millisecond,
+  date.microsecond,
+);
 
 Set<String> _shiftDateKeys(
   Iterable<String> keys,

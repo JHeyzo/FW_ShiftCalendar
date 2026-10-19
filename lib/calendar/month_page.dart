@@ -91,6 +91,16 @@ class _MonthPageState extends State<MonthPage> {
     );
   }
 
+  void _onHeaderBack(String view) {
+    if (view == '月') {
+      _setView('年');
+    } else if (view == '年') {
+      _changeYear(-1);
+    } else {
+      _moveMonth(-1);
+    }
+  }
+
   void _onDateTap(DateTime date) {
     final wasSelected = _sameDay(date, selected);
     store.selectDate(date);
@@ -191,8 +201,8 @@ class _MonthPageState extends State<MonthPage> {
       child: Row(
         children: [
           IconButton(
-            tooltip: '上一${view == '年' ? '年' : '月'}',
-            onPressed: () => view == '年' ? _changeYear(-1) : _moveMonth(-1),
+            tooltip: view == '月' ? '返回年视图' : '上一${view == '年' ? '年' : '月'}',
+            onPressed: () => _onHeaderBack(view),
             icon: const Icon(Icons.chevron_left),
           ),
           Expanded(
@@ -257,10 +267,16 @@ class _MonthPageState extends State<MonthPage> {
         : dates;
     final rowCount = visibleDates.length ~/ 7;
     final lunar = lunarOf(selected);
-    final dayOccurrences = _occurrences(
-      selected,
-      DateTime(selected.year, selected.month, selected.day + 1),
+    final visibleStart = _collapsed ? weekStart : month;
+    final visibleEnd = _collapsed
+        ? DateTime(weekStart.year, weekStart.month, weekStart.day + 7)
+        : DateTime(month.year, month.month + 1, 1);
+    final occurrencesByDay = _indexOccurrences(
+      _occurrences(visibleStart, visibleEnd),
+      visibleStart,
+      visibleEnd,
     );
+    final dayOccurrences = occurrencesByDay[_dateOnly(selected)] ?? const [];
     return CustomScrollView(
       key: const PageStorageKey<String>('month-scroll'),
       physics: const AlwaysScrollableScrollPhysics(),
@@ -292,7 +308,10 @@ class _MonthPageState extends State<MonthPage> {
                           children: [
                             for (var column = 0; column < 7; column++)
                               Expanded(
-                                child: _dayCell(visibleDates[row * 7 + column]),
+                                child: _dayCell(
+                                  visibleDates[row * 7 + column],
+                                  occurrencesByDay: occurrencesByDay,
+                                ),
                               ),
                           ],
                         ),
@@ -372,15 +391,15 @@ class _MonthPageState extends State<MonthPage> {
     );
   }
 
-  Widget _dayCell(DateTime? date) {
+  Widget _dayCell(
+    DateTime? date, {
+    Map<DateTime, List<dynamic>>? occurrencesByDay,
+  }) {
     if (date == null) return const SizedBox(height: 65);
     final isToday = _sameDay(date, store.today);
     final isSelected = _sameDay(date, selected);
     final lunar = lunarOf(date);
-    final hasItems = _occurrences(
-      date,
-      DateTime(date.year, date.month, date.day + 1),
-    ).isNotEmpty;
+    final hasItems = occurrencesByDay?[_dateOnly(date)]?.isNotEmpty ?? false;
     final mark = lunar.holidayName.isNotEmpty
         ? '休'
         : (lunar.isMakeupWorkday ? '班' : null);
@@ -543,10 +562,32 @@ class _MonthPageState extends State<MonthPage> {
           .toList()
         ..sort((a, b) => a.start.compareTo(b.start));
 
+  Map<DateTime, List<dynamic>> _indexOccurrences(
+    List<dynamic> occurrences,
+    DateTime from,
+    DateTime to,
+  ) {
+    final result = <DateTime, List<dynamic>>{};
+    for (final occurrence in occurrences) {
+      final start = occurrence.start as DateTime;
+      final end = occurrence.end as DateTime;
+      var day = _dateOnly(start.isBefore(from) ? from : start);
+      final lastCoveredDay = end.isAfter(start)
+          ? _dateOnly(end.subtract(const Duration(microseconds: 1)))
+          : _dateOnly(start);
+      while (!day.isAfter(lastCoveredDay) && day.isBefore(to)) {
+        (result[day] ??= <dynamic>[]).add(occurrence);
+        day = DateTime(day.year, day.month, day.day + 1);
+      }
+    }
+    return result;
+  }
+
   Widget _weekView() {
     final start = _mondayOf(selected);
     final end = DateTime(start.year, start.month, start.day + 7);
     final items = _occurrences(start, end);
+    final occurrencesByDay = _indexOccurrences(items, start, end);
     return ListView(
       padding: const EdgeInsets.only(bottom: 112),
       children: [
@@ -557,6 +598,7 @@ class _MonthPageState extends State<MonthPage> {
               Expanded(
                 child: _dayCell(
                   DateTime(start.year, start.month, start.day + i),
+                  occurrencesByDay: occurrencesByDay,
                 ),
               ),
           ],
