@@ -46,3 +46,9 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local-only development/signing material
+.local-signing/
+.metadata
+*.jks
+*.keystore

@@ -44,29 +44,51 @@ abstract final class FwTokens {
   static const double radiusDoneBtn = 20; // 完成按钮圆角
 
   // ---------- 文本样式 ----------
-  static const TextStyle monthTitle =
-      TextStyle(fontSize: spMonthTitle, color: ink, fontWeight: FontWeight.w500);
-  static const TextStyle weekTitle =
-      TextStyle(fontSize: spWeekday, color: ink30);
-  static const TextStyle dayNumber =
-      TextStyle(fontSize: spDayNumber, color: ink, fontWeight: FontWeight.w400);
-  static const TextStyle dayNumberToday =
-      TextStyle(fontSize: spDayNumber, color: Colors.white);
-  static const TextStyle lunar =
-      TextStyle(fontSize: spLunar, color: ink55);
-  static const TextStyle markRestStyle =
-      TextStyle(fontSize: spMark, color: markRest);
-  static const TextStyle markWorkStyle =
-      TextStyle(fontSize: spMark, color: markWork);
-  static const TextStyle sectionHead =
-      TextStyle(fontSize: spEmpty, color: ink55);
+  static const TextStyle monthTitle = TextStyle(
+    fontSize: spMonthTitle,
+    color: ink,
+    fontWeight: FontWeight.w500,
+  );
+  static const TextStyle weekTitle = TextStyle(
+    fontSize: spWeekday,
+    color: ink30,
+  );
+  static const TextStyle dayNumber = TextStyle(
+    fontSize: spDayNumber,
+    color: ink,
+    fontWeight: FontWeight.w400,
+  );
+  static const TextStyle dayNumberToday = TextStyle(
+    fontSize: spDayNumber,
+    color: Colors.white,
+  );
+  static const TextStyle lunar = TextStyle(fontSize: spLunar, color: ink55);
+  static const TextStyle markRestStyle = TextStyle(
+    fontSize: spMark,
+    color: markRest,
+  );
+  static const TextStyle markWorkStyle = TextStyle(
+    fontSize: spMark,
+    color: markWork,
+  );
+  static const TextStyle sectionHead = TextStyle(
+    fontSize: spEmpty,
+    color: ink55,
+  );
   static const TextStyle todoTitle = TextStyle(
-      fontSize: spTodoTitle,
-      color: ink,
-      fontWeight: FontWeight.w700,
-      height: 1.3);
+    fontSize: spTodoTitle,
+    color: ink,
+    fontWeight: FontWeight.w700,
+    height: 1.3,
+  );
   static const TextStyle todoTime = TextStyle(
-      fontSize: spTodoMeta, color: ink55, fontWeight: FontWeight.w500);
+    fontSize: spTodoMeta,
+    color: ink55,
+    fontWeight: FontWeight.w500,
+  );
   static const TextStyle createInput = TextStyle(
-      fontSize: spCreateInput, color: ink, fontWeight: FontWeight.w600);
+    fontSize: spCreateInput,
+    color: ink,
+    fontWeight: FontWeight.w600,
+  );
 }

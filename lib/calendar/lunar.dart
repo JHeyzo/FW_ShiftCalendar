@@ -4,19 +4,12 @@ import 'package:lunar_plus/lunar.dart';
 
 /// 自 epoch（1970-01-01）的天数。
 int dayNumber(DateTime date) {
-  final d = DateTime(date.year, date.month, date.day);
-  return d.difference(DateTime(1970, 1, 1)).inDays;
+  final d = DateTime.utc(date.year, date.month, date.day);
+  return d.difference(DateTime.utc(1970, 1, 1)).inDays;
 }
 
 /// 法定节假日名称（用于高亮）。清明节通过节气「清明」判断。
-const _legalHolidays = {
-  '元旦节',
-  '春节',
-  '劳动节',
-  '端午节',
-  '中秋节',
-  '国庆节',
-};
+const _legalHolidays = {'元旦节', '春节', '劳动节', '端午节', '中秋节', '国庆节'};
 
 /// 一条法定节假日区间（含首尾两天，国务院官方放假安排）。
 class _HolidaySpan {
@@ -30,20 +23,72 @@ class _HolidaySpan {
 /// 国务院官方「法定节假日」整段区间（2025 / 2026）。
 final List<_HolidaySpan> _holidaySpans = [
   // 2026
-  _HolidaySpan('元旦节', dayNumber(DateTime(2026, 1, 1)), dayNumber(DateTime(2026, 1, 3))),
-  _HolidaySpan('春节', dayNumber(DateTime(2026, 2, 15)), dayNumber(DateTime(2026, 2, 23))),
-  _HolidaySpan('清明节', dayNumber(DateTime(2026, 4, 4)), dayNumber(DateTime(2026, 4, 6))),
-  _HolidaySpan('劳动节', dayNumber(DateTime(2026, 5, 1)), dayNumber(DateTime(2026, 5, 5))),
-  _HolidaySpan('端午节', dayNumber(DateTime(2026, 6, 19)), dayNumber(DateTime(2026, 6, 21))),
-  _HolidaySpan('中秋节', dayNumber(DateTime(2026, 9, 25)), dayNumber(DateTime(2026, 9, 27))),
-  _HolidaySpan('国庆节', dayNumber(DateTime(2026, 10, 1)), dayNumber(DateTime(2026, 10, 7))),
+  _HolidaySpan(
+    '元旦节',
+    dayNumber(DateTime(2026, 1, 1)),
+    dayNumber(DateTime(2026, 1, 3)),
+  ),
+  _HolidaySpan(
+    '春节',
+    dayNumber(DateTime(2026, 2, 15)),
+    dayNumber(DateTime(2026, 2, 23)),
+  ),
+  _HolidaySpan(
+    '清明节',
+    dayNumber(DateTime(2026, 4, 4)),
+    dayNumber(DateTime(2026, 4, 6)),
+  ),
+  _HolidaySpan(
+    '劳动节',
+    dayNumber(DateTime(2026, 5, 1)),
+    dayNumber(DateTime(2026, 5, 5)),
+  ),
+  _HolidaySpan(
+    '端午节',
+    dayNumber(DateTime(2026, 6, 19)),
+    dayNumber(DateTime(2026, 6, 21)),
+  ),
+  _HolidaySpan(
+    '中秋节',
+    dayNumber(DateTime(2026, 9, 25)),
+    dayNumber(DateTime(2026, 9, 27)),
+  ),
+  _HolidaySpan(
+    '国庆节',
+    dayNumber(DateTime(2026, 10, 1)),
+    dayNumber(DateTime(2026, 10, 7)),
+  ),
   // 2025
-  _HolidaySpan('元旦节', dayNumber(DateTime(2025, 1, 1)), dayNumber(DateTime(2025, 1, 1))),
-  _HolidaySpan('春节', dayNumber(DateTime(2025, 1, 28)), dayNumber(DateTime(2025, 2, 4))),
-  _HolidaySpan('清明节', dayNumber(DateTime(2025, 4, 4)), dayNumber(DateTime(2025, 4, 6))),
-  _HolidaySpan('劳动节', dayNumber(DateTime(2025, 5, 1)), dayNumber(DateTime(2025, 5, 5))),
-  _HolidaySpan('端午节', dayNumber(DateTime(2025, 5, 31)), dayNumber(DateTime(2025, 6, 2))),
-  _HolidaySpan('中秋节·国庆节', dayNumber(DateTime(2025, 10, 1)), dayNumber(DateTime(2025, 10, 8))),
+  _HolidaySpan(
+    '元旦节',
+    dayNumber(DateTime(2025, 1, 1)),
+    dayNumber(DateTime(2025, 1, 1)),
+  ),
+  _HolidaySpan(
+    '春节',
+    dayNumber(DateTime(2025, 1, 28)),
+    dayNumber(DateTime(2025, 2, 4)),
+  ),
+  _HolidaySpan(
+    '清明节',
+    dayNumber(DateTime(2025, 4, 4)),
+    dayNumber(DateTime(2025, 4, 6)),
+  ),
+  _HolidaySpan(
+    '劳动节',
+    dayNumber(DateTime(2025, 5, 1)),
+    dayNumber(DateTime(2025, 5, 5)),
+  ),
+  _HolidaySpan(
+    '端午节',
+    dayNumber(DateTime(2025, 5, 31)),
+    dayNumber(DateTime(2025, 6, 2)),
+  ),
+  _HolidaySpan(
+    '中秋节·国庆节',
+    dayNumber(DateTime(2025, 10, 1)),
+    dayNumber(DateTime(2025, 10, 8)),
+  ),
 ];
 
 /// 调休上班日（假期里被调成上班的周末），日历上打「班」小标记。
@@ -157,9 +202,9 @@ LunarInfo lunarOf(DateTime date) {
 
 /// ISO 8601 周序号。
 int isoWeekNumber(DateTime date) {
-  final d = DateTime(date.year, date.month, date.day);
+  final d = DateTime.utc(date.year, date.month, date.day);
   // 周四所在的周为该周序号
   final thursday = d.add(Duration(days: 4 - d.weekday));
-  final jan1 = DateTime(thursday.year, 1, 1);
+  final jan1 = DateTime.utc(thursday.year, 1, 1);
   return (thursday.difference(jan1).inDays ~/ 7) + 1;
 }

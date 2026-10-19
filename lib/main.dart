@@ -1,36 +1,179 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import 'calendar/month_page.dart';
-import 'calendar/year_page.dart';
+import 'data/app_store.dart';
+import 'pages/calendar_management_page.dart';
+import 'pages/search_page.dart';
+import 'pages/settings_page.dart';
+import 'services/reminder_service.dart';
 import 'theme/fw_tokens.dart';
 import 'todo/create_todo_page.dart';
 import 'todo/todo_page.dart';
 
-void main() => runApp(const FengweiApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const FengweiApp());
+}
 
-/// 风味日历：ColorOS 风味的排班日历（空壳阶段：纯日历功能）。
-class FengweiApp extends StatelessWidget {
-  const FengweiApp({super.key});
+class FengweiApp extends StatefulWidget {
+  const FengweiApp({
+    super.key,
+    this.store,
+    this.loadStore = true,
+    this.enableReminders = true,
+  });
+  final AppStore? store;
+  final bool loadStore;
+  final bool enableReminders;
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '风味日历',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: FwTokens.pageBg,
-        colorScheme: ColorScheme.fromSeed(seedColor: FwTokens.brand),
+  State<FengweiApp> createState() => _FengweiAppState();
+}
+
+class _FengweiAppState extends State<FengweiApp> with WidgetsBindingObserver {
+  late final AppStore _store = widget.store ?? AppStore();
+  final _homeKey = GlobalKey<_HomeShellState>();
+  late final _reminders = ReminderService(onSelectDate: _openReminderDate);
+  Timer? _midnight;
+  bool _ready = false;
+  Object? _error;
+
+  void _openReminderDate(DateTime date) {
+    _store.selectDate(date);
+    _store.setView('月');
+    _homeKey.currentState?.showCalendar();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    setState(() {
+      _error = null;
+    });
+    try {
+      if (widget.loadStore) await _store.load();
+      if (!mounted) return;
+      if (widget.enableReminders) {
+        await _reminders.initialize();
+        if (!mounted) return;
+        _store.addListener(_syncReminders);
+        _syncReminders();
+      }
+      _armMidnight();
+      setState(() => _ready = true);
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  void _syncReminders() {
+    if (widget.enableReminders) unawaited(_reminders.synchronize(_store));
+  }
+
+  void _armMidnight() {
+    _midnight?.cancel();
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day + 1);
+    _midnight = Timer(next.difference(now) + const Duration(seconds: 1), () {
+      _store.refreshToday();
+      _syncReminders();
+      _armMidnight();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _ready) {
+      _store.refreshToday();
+      _syncReminders();
+      _armMidnight();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _midnight?.cancel();
+    _store.removeListener(_syncReminders);
+    if (widget.store == null) _store.dispose();
+    super.dispose();
+  }
+
+  ThemeData _theme(Brightness brightness) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: FwTokens.brand,
+      brightness: brightness,
+    );
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: brightness == Brightness.light
+          ? FwTokens.pageBg
+          : const Color(0xff14151a),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      home: const HomeShell(),
+      appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
+      inputDecorationTheme: const InputDecorationTheme(
+        border: OutlineInputBorder(),
+      ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _store,
+    builder: (context, _) => MaterialApp(
+      title: '风味日历',
+      debugShowCheckedModeBanner: false,
+      theme: _theme(Brightness.light),
+      darkTheme: _theme(Brightness.dark),
+      themeMode: _store.themeMode,
+      home: _error != null
+          ? Scaffold(
+              body: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.error_outline, size: 48),
+                        const SizedBox(height: 16),
+                        const Text('无法读取本地数据，原数据未被覆盖。'),
+                        const SizedBox(height: 8),
+                        Text('$_error'),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: _bootstrap,
+                          child: const Text('重试'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : !_ready
+          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+          : HomeShell(key: _homeKey, store: _store, reminders: _reminders),
+    ),
+  );
 }
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
+  const HomeShell({super.key, required this.store, required this.reminders});
+  final AppStore store;
+  final ReminderService reminders;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -38,160 +181,162 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
-  bool _showYear = false;
-  DateTime _month =
-      DateTime(DateTime.now().year, DateTime.now().month, 1);
+  AppStore get store => widget.store;
 
-  /// 日历 tab：年视图 / 月视图切换。
-  Widget _calendarTab() {
-    if (_showYear) {
-      final now = DateTime.now();
-      return YearPage(
-        year: _month.year,
-        today: DateTime(now.year, now.month, now.day),
-        onPickMonth: (m) => setState(() {
-          _month = DateTime(_month.year, m, 1);
-          _showYear = false;
-        }),
-      );
-    }
-    return MonthPage(
-      key: ValueKey('month-$_month'),
-      initialMonth: _month,
-      onOpenYear: () => setState(() => _showYear = true),
-      onMonthChanged: (m) => _month = m,
+  void showCalendar() {
+    if (mounted) setState(() => _tab = 0);
+  }
+
+  void _edit(CalendarEntry entry, DateTime occurrenceDate) {
+    openEntryEditor(
+      context,
+      store,
+      entry: entry,
+      occurrenceDate: occurrenceDate,
     );
   }
 
-  void _create() {
-    showModalBottomSheet(
+  void _push(Widget page) {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+  }
+
+  Future<void> _create({DateTime? date}) async {
+    final kind = await showModalBottomSheet<EntryKind>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => SafeArea(
+      showDragHandle: true,
+      builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.check_box_outlined),
-              title: const Text('新建待办'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const CreateTodoPage(),
-                  ),
-                );
-              },
+              leading: const Icon(Icons.event_outlined),
+              title: const Text('新建日程'),
+              onTap: () => Navigator.pop(context, EntryKind.event),
             ),
             ListTile(
-              leading: const Icon(Icons.edit_calendar_outlined),
-              title: const Text('手动调班'),
-              subtitle: const Text('空壳：后续接排班覆盖'),
-              onTap: () => Navigator.pop(context),
+              leading: const Icon(Icons.check_box_outlined),
+              title: const Text('新建待办'),
+              onTap: () => Navigator.pop(context, EntryKind.todo),
             ),
           ],
         ),
       ),
     );
+    if (kind != null && mounted) {
+      await openEntryEditor(
+        context,
+        store,
+        kind: kind,
+        date: date ?? store.selectedDate,
+      );
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: IndexedStack(
-          index: _tab,
-          children: [_calendarTab(), const TodoPage()],
-        ),
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: IndexedStack(
+        index: _tab,
+        children: [
+          MonthPage(
+            store: store,
+            onCreate: (date) => _create(date: date),
+            onEdit: _edit,
+            onSettings: () =>
+                _push(SettingsPage(store: store, reminders: widget.reminders)),
+            onManage: () => _push(CalendarManagementPage(store: store)),
+            onSearch: () => _push(SearchPage(store: store)),
+          ),
+          TodoPage(store: store, onEdit: _edit),
+        ],
       ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+    ),
+    bottomNavigationBar: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _frosted(
-              radius: FwTokens.radiusPill,
-              child: Container(
-                padding: const EdgeInsets.all(4),
+            Flexible(
+              child: _frosted(
+                context,
+                radius: 999,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _navTab('日历', 0),
-                    _navTab('待办', 1),
+                    Flexible(
+                      child: _navTab('日历', Icons.calendar_month_outlined, 0),
+                    ),
+                    Flexible(child: _navTab('待办', Icons.checklist, 1)),
                   ],
                 ),
               ),
             ),
             const SizedBox(width: 12),
             _frosted(
+              context,
               radius: 28,
-              child: GestureDetector(
-                onTap: _create,
-                child: const SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: Icon(Icons.add,
-                      size: 30, color: FwTokens.ink),
-                ),
+              child: IconButton(
+                tooltip: '新建',
+                onPressed: _create,
+                icon: const Icon(Icons.add, size: 30),
+                padding: const EdgeInsets.all(14),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
 
-  /// 磨砂玻璃容器：对齐系统日历底部悬浮条。
-  Widget _frosted({required double radius, required Widget child}) {
+  Widget _frosted(
+    BuildContext context, {
+    required double radius,
+    required Widget child,
+  }) {
     final br = BorderRadius.circular(radius);
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: br,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 16,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: br,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Container(
-            color: Colors.white.withValues(alpha: 0.65),
-            child: child,
-          ),
+    return ClipRRect(
+      borderRadius: br,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Material(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh
+              .withValues(alpha: 0.8),
+          child: child,
         ),
       ),
     );
   }
 
-  Widget _navTab(String label, int index) {
+  Widget _navTab(String label, IconData icon, int index) {
     final selected = _tab == index;
-    return GestureDetector(
-      onTap: () => setState(() => _tab = index),
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          borderRadius:
-              BorderRadius.circular(FwTokens.radiusPill),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? FwTokens.ink : FwTokens.ink55,
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => setState(() => _tab = index),
+        child: Container(
+          margin: const EdgeInsets.all(4),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            color: selected
+                ? Theme.of(context).colorScheme.surface
+                : Colors.transparent,
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),
