@@ -1,0 +1,45 @@
+name: Release JNI bridge regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Clean and resolve locked dependencies
+        run: |
+          flutter clean
+          flutter pub get --enforce-lockfile
+      - name: Static analysis and full Flutter suite (including DST)
+        env:
+          TZ: America/New_York
+        run: |
+          flutter analyze
+          flutter test
+      - name: Test APK verifier
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Build minified release (unsigned; no signing secrets in CI)
+        run: flutter build apk --release
+      - name: Android release static analysis
+        working-directory: android
+        run: ./gradlew :app:lintRelease --console=plain
+      - name: Check actual release DEX JNI contracts
+        run: python3 scripts/verify_release_bridge.py build/app/outputs/flutter-apk/app-release.apk

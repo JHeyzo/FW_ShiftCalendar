@@ -52,3 +52,19 @@ flutter build apk --debug
 全套测试使用纽约时区以实际覆盖夏令时切换：断言当天确实为 23／25 小时，同时验证全天结束日期、日序号与定时重复的本地时刻。不设此时区时，该专用测试会明确跳过，其余测试照常运行。
 
 正式包通过被 Git 忽略的 `android/key.properties` 加载 `storeFile`、`storePassword`、`keyAlias`、`keyPassword`，然后运行 `flutter build apk --release`。密钥路径可用绝对路径；构建后删除临时配置。不提供该文件时 release 不会回退到 debug 签名。不要提交 keystore、`key.properties` 或本地 SDK 路径。
+
+### Release JNI 桥回归检查
+
+Release 继续启用 R8 压缩与混淆，并显式加载 `android/app/proguard-rules.pro`。`shared_preferences_android` 的 Dart JNI 代码按原始 JVM 名称和方法描述符查找接口；仅保留方法名不够，参数中的 `kotlin.coroutines.Continuation` 等类型也必须保留。规则同时保护插件桥、JNI 协程辅助类型和 Kotlin 结果包装字段，不更改存储格式、存储键或任何读写/迁移逻辑。
+
+```sh
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
+flutter clean
+flutter pub get --enforce-lockfile
+flutter build apk --release
+python3 scripts/verify_release_bridge.py build/app/outputs/flutter-apk/app-release.apk
+```
+
+检查器验证最终 APK 的 DEX 中真实存在的 JNI 类、成员及描述符，而不只检查规则文本。CI 对每次 main 推送和 PR 运行静态分析、完整 Flutter 测试（纽约时区）、检查器测试、干净的混淆 Release 构建及桥接口检查；CI 不持有签名密钥，产物不用于安装分发。签名发布时另用 Android SDK 的 `apksigner verify --verbose --print-certs` 验证，并核对旧版证书一致。
+
+这些检查不连接手机、不清除或迁移旧数据。DEX 检查不是 Android 真机端到端运行测试；安装验证应使用同一签名覆盖更新，勿卸载或清除应用数据。

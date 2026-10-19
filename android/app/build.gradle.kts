@@ -52,6 +52,12 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // Without local credentials this stays unsigned, never debug-signed.
             signingConfig = signingConfigs.findByName("release")
         }
