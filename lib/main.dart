@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'calendar/month_page.dart';
 import 'calendar/year_page.dart';
 import 'theme/fw_tokens.dart';
+import 'todo/create_todo_page.dart';
 import 'todo/todo_page.dart';
 
 void main() => runApp(const FengweiApp());
@@ -75,8 +76,16 @@ class _HomeShellState extends State<HomeShell> {
             ListTile(
               leading: const Icon(Icons.check_box_outlined),
               title: const Text('新建待办'),
-              subtitle: const Text('空壳：后续接待办数据层'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const CreateTodoPage(),
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.edit_calendar_outlined),

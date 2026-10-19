@@ -35,6 +35,13 @@ abstract final class FwTokens {
   static const double padCardL = 48; // 卡片内左（含勾选位）
   static const double padCardR = 24; // 卡片内右
   static const double navBarH = 66; // 底部导航高
+  static const double todoCheckHitW = 64; // 勾选框热区宽
+  static const double todoCheckHitH = 56; // 勾选框热区高
+  static const double todoListPadBottom = 120; // 列表底部留白（悬浮条让位）
+  static const double spCreateInput = 24; // 新建待办输入框
+  static const int createInputMaxLength = 300; // 新建待办字数上限
+  static const double radiusCreateCard = 12; // 新建卡片圆角
+  static const double radiusDoneBtn = 20; // 完成按钮圆角
 
   // ---------- 文本样式 ----------
   static const TextStyle monthTitle =
@@ -53,4 +60,13 @@ abstract final class FwTokens {
       TextStyle(fontSize: spMark, color: markWork);
   static const TextStyle sectionHead =
       TextStyle(fontSize: spEmpty, color: ink55);
+  static const TextStyle todoTitle = TextStyle(
+      fontSize: spTodoTitle,
+      color: ink,
+      fontWeight: FontWeight.w700,
+      height: 1.3);
+  static const TextStyle todoTime = TextStyle(
+      fontSize: spTodoMeta, color: ink55, fontWeight: FontWeight.w500);
+  static const TextStyle createInput = TextStyle(
+      fontSize: spCreateInput, color: ink, fontWeight: FontWeight.w600);
 }
